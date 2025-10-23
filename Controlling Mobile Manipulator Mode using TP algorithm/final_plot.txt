@@ -1,0 +1,47 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Load saved trajectory data
+# Each file contains: [end_effector_xy, base_xy], each as (x_list, y_list)
+forward_then_rotate = np.load("move then rotate.npy", allow_pickle=True)
+rotate_then_forward = np.load("rotate then move.npy", allow_pickle=True)
+move_and_rotate = np.load("move and rotate.npy", allow_pickle=True)
+
+# Unpack data for each method
+ee_FR_x, ee_FR_y = forward_then_rotate[0]
+base_FR_x, base_FR_y = forward_then_rotate[1]
+
+ee_RF_x, ee_RF_y = rotate_then_forward[0]
+base_RF_x, base_RF_y = rotate_then_forward[1]
+
+ee_ARC_x, ee_ARC_y = move_and_rotate[0]
+base_ARC_x, base_ARC_y = move_and_rotate[1]
+
+# Plotting
+fig, ax = plt.subplots()
+ax.set_title(" Mobile Manipulator Position on the XY Plane")
+ax.set_xlabel("X [m]")
+ax.set_ylabel("Y [m]")
+ax.set_aspect('equal')
+ax.grid(True)
+
+# Forward then Rotate
+ax.plot(ee_FR_x, ee_FR_y, 'x-', color='red', label='End-Effector position: move then rotate')
+ax.plot(base_FR_x, base_FR_y, '.--', color='orange', label='Base position: move then rotate')
+
+# Rotate then Forward
+ax.plot(ee_RF_x, ee_RF_y, 'x-', color='blue', label='End-Effector position: rotate then move')
+ax.plot(base_RF_x, base_RF_y, '.--', color='black', label='Base position: rotate then move')
+
+# Arc (Simultaneous motion)
+ax.plot(ee_ARC_x, ee_ARC_y, 'x-', color='yellow', label='End-Effector position: move and rotate')
+ax.plot(base_ARC_x, base_ARC_y, '.--', color='green', label='Base position: move and rotate')
+
+# Add legend
+ax.legend(loc='best')
+
+# Save plot for report
+plt.savefig("xy_trajectories_comparison.png", dpi=300)
+
+# Show plot
+plt.show()

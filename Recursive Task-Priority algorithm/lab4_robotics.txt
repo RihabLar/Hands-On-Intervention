@@ -1,0 +1,305 @@
+from Common import * # Includes numpy import
+
+def jacobianLink(T, revolute, link): # Needed in Exercise 2
+    '''
+        Function builds a Jacobian for the end-effector of a robot,
+        described by a list of kinematic transformations and a list of joint types.
+
+        Arguments:
+        T (list of Numpy array): list of transformations along the kinematic chain of the robot (from the base frame)
+        revolute (list of Bool): list of flags specifying if the corresponding joint is a revolute joint
+        link(integer): index of the link for which the Jacobian is computed
+
+        Returns:
+        (Numpy array): end-effector Jacobian
+    '''
+    # Code almost identical to the one from lab2_robotics...
+
+    # 1. Initialize J and O.
+    # 2. For each joint of the robot
+    #   a. Extract z and o.
+    #   b. Check joint type.
+    #   c. Modify corresponding column of J.
+    
+    # 1. Initialize J and O.
+
+    
+    # 1. Initialize J and O.
+    # 2. For each joint of the robot
+    #   a. Extract z and o.
+    #   b. Check joint type.
+    #   c. Modify corresponding column of J.
+    
+    # 1. Initialize J and O.
+    J = np.zeros((6, len(T)-1 ))  # Initialize the Jacobian matrix with zeros
+    O_link = np.array([T[link][:3, 3]]).T  # Position of the link's frame in the base frame
+    Z = np.array([[0, 0, 1]]).T  # Z-axis of the base frame
+    # 2. For each joint of the robot up to the specified link 
+    for i in range(link):
+        #   a. Extract z and o.
+        # Extract the rotation matrix and origin from the transformation matrix
+        Ri = T[i][:3, :3]
+        Oi = np.array([T[i][:3, 3]]).T
+        
+        # Extract the z-axis from the rotation matrix
+        Zi = Ri @ Z
+        #   b. Check joint type.
+        #   c. Modify corresponding column of J.
+        if revolute[i]:
+            # For revolute joints, use the cross product of z and (O - O_i)
+            J[:3, i] = np.cross(Zi.T, (O_link - Oi).T).T[:, 0]
+            J[3:, i] = Zi[:, 0]
+        else:
+            # For prismatic joints, the linear velocity is along the z-axis, and angular velocity is zero
+            J[:3, i] = Zi[:, 0]
+    
+    return J
+
+
+'''
+    Class representing a robotic manipulator.
+'''
+class Manipulator:
+    '''
+        Constructor.
+
+        Arguments:
+        d (Numpy array): list of displacements along Z-axis
+        theta (Numpy array): list of rotations around Z-axis
+        a (Numpy array): list of displacements along X-axis
+        alpha (Numpy array): list of rotations around X-axis
+        revolute (list of Bool): list of flags specifying if the corresponding joint is a revolute joint
+    '''
+    def __init__(self, d, theta, a, alpha, revolute):
+        self.d = d
+        self.theta = theta
+        self.a = a
+        self.alpha = alpha
+        self.revolute = revolute
+        self.dof = len(self.revolute)
+        self.q = np.zeros(self.dof).reshape(-1, 1)
+        self.update(0.0, 0.0)
+
+    '''
+        Method that updates the state of the robot.
+
+        Arguments:
+        dq (Numpy array): a column vector of joint velocities
+        dt (double): sampling time
+    '''
+    def update(self, dq, dt):       # given the joint velocities dq and a time step dt,
+                                    # update the joint positions and recompute the forward kinematics
+        self.q += dq * dt
+        for i in range(len(self.revolute)):
+            if self.revolute[i]:
+                self.theta[i] = self.q[i]
+            else:
+                self.d[i] = self.q[i]
+        self.T = kinematics(self.d, self.theta, self.a, self.alpha)
+
+    ''' 
+        Method that returns the characteristic points of the robot.
+    '''
+    def drawing(self):
+        return robotPoints2D(self.T)
+
+    '''
+        Method that returns the end-effector Jacobian.
+    '''
+    def getEEJacobian(self):
+        return jacobian(self.T, self.revolute)          #for velocity control
+    '''
+        Method that returns the end-effector transformation.
+    '''
+    def getEETransform(self):                           # for psoition and orientation
+        return self.T[-1]
+
+    '''
+        Method that returns the position of a selected joint.
+
+        Argument:
+        joint (integer): index of the joint
+
+        Returns:
+        (double): position of the joint
+    '''
+    def getJointPos(self, joint):          # get the position of the specific joint                         
+        return self.q[joint]
+
+    '''
+        Method that returns number of DOF of the manipulator.
+    '''
+    def getDOF(self):                     # get the # of DOF of the robot
+        return self.dof
+    
+    def getTransform(self, link):
+        return self.T[link]
+    
+    def getJacobianLink(self, link):
+        return jacobianLink(self.T, self.revolute, link)
+    
+
+'''
+    Base class representing an abstract Task.
+'''
+class Task:
+    '''
+        Constructor.
+
+        Arguments:
+        name (string): title of the task
+        desired (Numpy array): desired sigma (goal)
+    '''
+    def __init__(self, name, desired):
+        self.name = name # task title
+        self.sigma_d = desired # desired sigma , desired goal
+        self.error = []
+        self.K = None
+        self.feedforward = None
+        
+    '''
+        Method updating the task variables (abstract).
+
+        Arguments:
+        robot (object of class Manipulator): reference to the manipulator
+    '''
+    def update(self, robot):
+        pass
+
+    ''' 
+        Method setting the desired sigma.
+
+        Arguments:
+        value(Numpy array): value of the desired sigma (goal)
+    '''
+    def setDesired(self, value):
+        self.sigma_d = value
+
+    '''
+        Method returning the desired sigma.
+    '''
+    def getDesired(self):
+        return self.sigma_d
+
+    '''
+        Method returning the task Jacobian.
+    '''
+    def getJacobian(self):
+        return self.J
+
+    '''
+        Method returning the task error (tilde sigma).
+    '''    
+    def getError(self):
+        return self.err
+    
+    def setFeedforward(self, value):
+        self.feedforward = np.ones(self.sigma_d.shape)*value # Set the feedforward velocity vector for the task
+
+    def getFeedforward(self):
+        return self.feedforward   # Return the stored feedforward velocity vector
+    
+    def setGainMatrix(self, value):
+        self.K = self.K * value    # Scale the gain matrix K by the specified value
+
+    def getGainMatrix(self):
+        return self.K              # Return the current gain matrix K for the task
+
+'''
+    Subclass of Task, representing the 2D position task.
+'''
+class Position2D(Task):                              # represent a 2D position task, where the goal is to control the position of a point (the EE or a specific link) in the 2D plane 
+    def __init__(self, name, desired, link = 2):
+        super().__init__(name, desired) 
+        self.J =  np.zeros((len(desired),3))      # Initialize Jacobian with proper dimensions (2 x 3 for 2D position)
+        self.err = np.zeros(desired.shape)   # Initialize with proper dimensions
+        self.link = link
+        self.feedforward = np.zeros(desired.shape)  # 2,1
+        self.K = np.eye(len(desired)) # 2
+
+    def update(self, robot):
+        #-----------------------------Exercice 1-----------------------------------
+        '''self.J = robot.getEEJacobian()[: len(self.sigma_d), :]   # Update task Jacobian , keep only the rows ccorresponding to the linear velocities (x_d, y_d)
+        sigma = robot.getEETransform()[: len(self.sigma_d), 3].reshape(self.sigma_d.shape)  # Get the current position of the end-effector (x, y)
+        self.err =  self.getDesired()- sigma             # Update task error
+        self.error.append(np.linalg.norm(self.err))'''
+          
+        #-----------------------------Exercice 2-----------------------------------
+        self.J = robot.getJacobianLink(self.link)[: len(self.sigma_d), :]  # Update task Jacobian , keep only the rows ccorresponding to the linear velocities (x_d, y_d)
+        sigma = robot.getTransform(self.link)[: len(self.sigma_d), -1].reshape(self.sigma_d.shape)  # Get the current position of the end-effector (x, y)
+        self.err =  self.getDesired()- sigma             # Update task error
+        self.error.append(np.linalg.norm(self.err))
+
+
+'''
+    Subclass of Task, representing the 2D orientation task.
+'''
+class Orientation2D(Task):
+    def __init__(self, name, desired, link = 3):
+        super().__init__(name, desired)
+        self.J = np.zeros ((len(desired),3)) # Initialize with proper dimensions
+        self.err =  np.zeros(desired.shape) # Initialize with proper dimensions
+        self.link = link
+        self.feedforward = np.zeros(desired.shape)  # 1,1
+        self.K = np.eye(len(desired)) # 1
+        
+    def update(self, robot):
+    #-----------------------------Exercice 1-----------------------------------
+        '''self.J = robot.getEEJacobian()[-1, :].reshape(1,3)          # Update task Jacobian
+        sigma = np.arctan2(robot.getEETransform()[1,0],robot.getEETransform()[0,0])  # Get the current orientation of the end-effector (theta)
+        self.err = self.getDesired() - sigma.reshape(self.sigma_d.shape)                           # Update task error
+        self.error.append(np.linalg.norm(self.err))   # Append the norm of the error for tracking
+''' 
+    #-----------------------------Exercice 2-----------------------------------
+        self.J = robot.getJacobianLink(self.link)[-1, :].reshape(1,3)          # Update task Jacobian
+        sigma = np.arctan2(robot.getTransform(self.link)[1,0],robot.getTransform(self.link)[0,0])  # Get the current orientation of the end-effector (theta)
+        self.err = self.getDesired() - sigma.reshape(self.sigma_d.shape)                           # Update task error
+        self.error.append(np.linalg.norm(self.err))   # Append the norm of the error for tracking
+
+'''
+    Subclass of Task, representing the 2D configuration task.
+'''
+class Configuration2D(Task):
+    def __init__(self, name, desired, link = 2):
+        super().__init__(name, desired)
+        self.J = np.zeros((3,3))    # Initialize with proper dimensions
+        self.err = np.zeros(desired.shape) # Initialize with proper dimensions
+        self.link = link
+        self.feedforward = np.zeros(desired.shape)  #3,1
+        self.K = np.zeros(len(desired)) # 3
+        
+    def update(self, robot):
+        #-----------------------------Exercice 1-----------------------------------
+        '''self.J = robot.getEEJacobian()[[0, 1, -1], :]     # Update task Jacobian
+        sigma_p = robot.getEETransform()[:2, -1]
+        sigma_o = np.arctan2(robot.getEETransform()[1,0],robot.getEETransform()[0,0]) # Get the current orientation of the end-effector (theta)
+        sigma = np.block([sigma_p, sigma_o])        # Combine position and orientation into a single task variable
+        self.err = self.getDesired() - sigma.reshape(3,1)
+        self.error.append(np.linalg.norm(self.err)) # Append the norm of the error for tracking'''
+        #-----------------------------Exercice -----------------------------------
+        self.J = robot.getJacobianLink(self.link)[[0, 1, -1], :]     # Update task Jacobian
+        sigma_p = robot.getTransform(self.link)[:2, -1]    # Get the current position of the end-effector (x, y)
+        sigma_o = np.arctan2(robot.getTransform(self.link)[1,0],robot.getTransform(self.link)[0,0])   # Get the current orientation of the end-effector (theta)
+        sigma = np.block([sigma_p, sigma_o])           # Combine position and orientation into a single task variable
+        self.err = self.getDesired() - sigma.reshape(3,1)
+        self.error.append(np.linalg.norm(self.err))     # Append the norm of the error for tracking
+
+''' 
+    Subclass of Task, representing the joint position task.
+'''
+# class JointPosition(Task):
+
+class Joint_Position(Task):
+    def __init__(self, name, desired, joint):
+        super().__init__(name, desired)
+        self.J = np.zeros((1,3))    # Initialize with proper dimensions
+        self.err = np.zeros(desired.shape) # Initialize with proper dimensions
+        self.Joint = joint
+        self.feedforward = np.zeros(desired.shape)  # 2,1
+        self.K = np.zeros(len(desired)) # 2
+
+    def update(self, robot):
+        self.J[0,self.Joint] = 1    # Update task Jacobian
+        sigma = robot.getJointPos(self.Joint)           # Get the current position of the joint
+        self.err = self.getDesired() - sigma
+        self.error.append(np.linalg.norm(self.err))     # Append the norm of the error for tracking

@@ -1,0 +1,31 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Load error norm data
+errnorm_transpose = np.load("errnorm_transpose.npy")
+errnorm_pseudoinverse = np.load("errnorm_pseudoinverse.npy")
+errnorm_DLS = np.load("errnorm_DLS.npy")
+
+# Generate time vector starting from 0 with step size dt
+dt = 1.0 / 60.0
+
+transpose_time = np.arange(0, len(errnorm_transpose) * dt, dt)
+pseudoinverse_time = np.arange(0, len(errnorm_pseudoinverse) * dt, dt)
+DLS_time = np.arange(0, len(errnorm_DLS) * dt, dt)
+
+# Plot error norm curves
+plt.figure(figsize=(8, 6))
+plt.plot(transpose_time, errnorm_transpose, label="Transpose", linestyle="-")
+plt.plot(pseudoinverse_time, errnorm_pseudoinverse, label="Pseudoinverse", linestyle="-")
+plt.plot(DLS_time, errnorm_DLS, label="DLS", linestyle="-")
+
+# Figure design
+plt.xlabel("Time")
+plt.ylabel("Error Norm")
+plt.title("Resolved rate motion control")
+plt.legend()
+plt.grid(True)
+
+plt.show()
+
+

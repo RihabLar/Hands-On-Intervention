@@ -1,0 +1,125 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as anim
+from Common import *
+
+# Robot definition
+d = np.zeros(2)  # displacement along Z-axis
+q = np.array([0.2, 0.5])  # rotation around Z-axis (theta)
+a = np.array([0.75, 0.5])  # displacement along X-axis
+alpha = np.zeros(2)  # rotation around X-axis
+revolute = [True, True]
+sigma_d = np.array([0, 1]).reshape(2, 1)  # Goal Position
+K = np.diag([1, 1])  # Gain
+control_method = '' 
+damping = 0.1 # Damping factor
+
+# Simulation params
+dt = 1.0 / 60.0
+
+# Animation setup
+def setup_figure():
+    fig = plt.figure()
+    ax = fig.add_subplot(111, autoscale_on=False, xlim=(-2, 2), ylim=(-2, 2))
+    ax.set_title('Simulation')
+    ax.set_aspect('equal')
+    ax.grid()
+    line, = ax.plot([], [], 'o-', lw=2)  # Robot structure
+    path, = ax.plot([], [], 'c-', lw=1)  # End-effector path
+    point, = ax.plot([], [], 'rx')  # Target
+    return fig, ax, line, path, point
+
+# Memory
+PPx = []
+PPy = []
+
+# Lists to store the error norms for each method
+err_norm_P = []
+err_norm_T = []
+err_norm_D = []
+
+
+# Simulation initialization
+def init():
+    line.set_data([], [])
+    path.set_data([], [])
+    point.set_data([], [])
+    return line, path, point
+
+
+# Simulation loop
+def simulate(t):
+    global d, q, a, alpha, revolute, sigma_d
+    global PPx, PPy
+    global err_norm_P, err_norm_T, err_norm_D
+
+    # Update robot
+    T = kinematics(d, q, a, alpha)
+    J = jacobian(T, revolute)
+    J_pos = J[0:2, :]  # Position Jacobian
+
+    # Update control
+    sigma = T[-1][:2, 3]             # Position of the end-effector
+    err = sigma_d.flatten() - sigma  # Control error
+
+    # Control Solutions 
+    if control_method == 'Transpose':
+        dq = J_pos.T @ (K @ err)  # Transpose method
+        err_norm_T.append(np.linalg.norm(err))
+
+    elif control_method == 'Pseudoinverse':
+        dq = np.linalg.pinv(J_pos) @ (K @ err)  # Pseudoinverse method
+        err_norm_P.append(np.linalg.norm(err))
+
+    elif control_method == 'DLS':
+        dq = DLS(J_pos, damping) @ (K @ err)  # Damped Least Squares (DLS) method
+        err_norm_D.append(np.linalg.norm(err))
+
+    q += dt * dq  # Update joint angles
+
+    # Update drawing
+    P = robotPoints2D(T)
+    line.set_data(P[0, :], P[1, :])
+    PPx.append(P[0, -1])
+    PPy.append(P[1, -1])
+    path.set_data(PPx, PPy)
+    point.set_data(sigma_d[0], sigma_d[1])
+
+    return line, path, point
+
+
+# Run transpose simulation
+control_method = 'Transpose'
+PPx = []
+PPy = []
+q = np.array([0.2, 0.5])  # Reset initial joint angles
+fig, ax, line, path, point = setup_figure()
+animation = anim.FuncAnimation(fig, simulate, np.arange(0, 20, dt),
+                               interval=10, blit=True, init_func=init, repeat=False)
+plt.pause(20)
+plt.close(fig)
+np.save("errnorm_transpose.npy", np.array(err_norm_T))
+
+# Run pseudoinverse simulation
+control_method = "Pseudoinverse"
+PPx = []
+PPy = []
+q = np.array([0.2, 0.5])  # Reset initial joint angles
+fig, ax, line, path, point = setup_figure()
+animation = anim.FuncAnimation(fig, simulate, np.arange(0, 20, dt),
+                               interval=10, blit=True, init_func=init, repeat=False)
+plt.pause(20)
+plt.close(fig)
+np.save("errnorm_pseudoinverse.npy", np.array(err_norm_P))
+
+# Run DLS simulation
+control_method = "DLS"
+PPx = []
+PPy = []
+q = np.array([0.2, 0.5])  # Reset initial joint angles
+fig, ax, line, path, point = setup_figure()
+animation = anim.FuncAnimation(fig, simulate, np.arange(0, 20, dt),
+                               interval=10, blit=True, init_func=init, repeat=False)
+plt.pause(20)
+plt.close(fig)
+np.save("errnorm_DLS.npy", np.array(err_norm_D))
